@@ -37,6 +37,7 @@ from zoneinfo import ZoneInfo
 
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+from telegram.ext import MessageHandler, filters
 
 
 # ========================================================
@@ -54,8 +55,8 @@ DATA_DIR = "data"
 SOUNDS_FOLDER = "sounds"
 
 SCRAPER_FILES = [
-    os.path.join("scrapers", "scrape_toto.py"),
-    os.path.join("scrapers", "scrape_magnum.py"),
+    "scrape_toto.py",
+    "scrape_magnum.py",
 ]
 
 SUBSCRIBERS_FILE = "subscribers.json"
@@ -75,30 +76,82 @@ DRAW_COLUMNS = (
 # ========================================================
 
 def msg_start_menu(bot_name):
+
+    toto = latest_row("toto")
+    magnum = latest_row("magnum")
+
+    if toto or magnum:
+
+        latest_dates = []
+
+        if toto:
+            latest_dates.append(
+                f"🎰 Toto: {toto.get('date', 'N/A')}"
+            )
+
+        if magnum:
+            latest_dates.append(
+                f"🎰 Magnum: {magnum.get('date', 'N/A')}"
+            )
+
+        latest_section = (
+            "📌 Latest Updated Results\n"
+            + "\n".join(latest_dates)
+        )
+
+    else:
+
+        latest_section = (
+            "⚠️ No dataset found yet lah 😴\n"
+            "Use /update first so RandAI can build the data/ folder."
+        )
+
     return (
         f"Oi, {bot_name} online already lah 😴\n\n"
+
         f"I’m RandAI — your lazy-but-useful 4D result bot.\n"
-        f"I check Toto & Magnum from 4dmoon, update your CSV, analyse numbers, "
-        f"and notify you when new result keluar.\n\n"
-        f"📌 What I can do:\n"
-        f"• Auto-check Toto & Magnum results\n"
-        f"• Update local CSV datasets inside data/\n"
-        f"• Notify subscribers when new results appear\n"
-        f"• Search old numbers\n"
-        f"• Show hot/cold number analysis\n"
-        f"• Send CSV files\n"
-        f"• Auto backup safe files to GitHub\n\n"
-        f"Commands:\n\n"
-        f"🔔 /subscribe — get auto result updates\n"
-        f"🔕 /unsubscribe — stop auto updates\n"
-        f"🔄 /update — manually scrape latest result now\n"
-        f"📦 /dataset — show latest saved result from database\n"
-        f"🔍 /search 1234 — search old results\n"
-        f"🔥 /hot — show hot numbers\n"
-        f"🥶 /cold — show cold numbers\n"
-        f"📊 /stats — dataset statistics\n"
-        f"🆘 /help — show command list\n\n"
-        f"Use properly ah, don’t spam me like loan shark bot 😴"
+        f"I scrape Toto & Magnum from 4dmoon, "
+        f"update datasets, analyse numbers, "
+        f"and spoonfeed results to lazy people 😭\n\n"
+
+        f"{latest_section}\n\n"
+
+        f"━━━━━━━━━━━━━━\n"
+        f"📌 MAIN COMMANDS\n\n"
+
+        f"🔔 /subscribe\n"
+        f"Get auto result updates.\n\n"
+
+        f"🔕 /unsubscribe\n"
+        f"Stop auto notifications.\n\n"
+
+        f"🔄 /update\n"
+        f"Force RandAI to scrape latest results now.\n\n"
+
+        f"📦 /dataset\n"
+        f"Show latest saved result from local data/.\n\n"
+
+        f"🔍 /search 1234\n"
+        f"Search old result history.\n\n"
+
+        f"🔥 /hot\n"
+        f"Show hot numbers.\n\n"
+
+        f"🥶 /cold\n"
+        f"Show cold numbers.\n\n"
+
+        f"📊 /stats\n"
+        f"Show dataset statistics.\n\n"
+
+        f"🆘 /help\n"
+        f"Show full command explanation.\n\n"
+
+        f"━━━━━━━━━━━━━━\n"
+        f"🤖 RandAI Status: ONLINE\n"
+        f"💾 Dataset Folder: data/\n\n"
+
+        f"Use properly ah.\n"
+        f"RandAI not your unpaid intern 😴"
     )
 
 
@@ -574,18 +627,54 @@ def hot_cold_message(mode="hot", limit_rows=50):
 
     if mode == "hot":
         selected = counter.most_common(10)
-        title = f"🔥 Hot Numbers\nBased on last {limit_rows} rows\n"
+        title = "🔥 RandAI Hot Number Board"
+        subtitle = "Most frequent numbers recently"
     else:
         selected = sorted(counter.items(), key=lambda x: (x[1], x[0]))[:10]
-        title = f"🥶 Cold Numbers\nBased on last {limit_rows} rows\n"
+        title = "🥶 RandAI Cold Number Board"
+        subtitle = "Least frequent numbers recently"
 
-    lines = [title]
+    lines = [
+        title,
+        subtitle,
+        "",
+        f"📊 Based on last {limit_rows} rows",
+        "━━━━━━━━━━━━━━",
+    ]
 
-    for num, count in selected:
-        lines.append(f"{num} -> {count} time(s)")
+    medals = ["🥇", "🥈", "🥉"]
+
+    for index, (num, count) in enumerate(selected, start=1):
+        rank = medals[index - 1] if index <= 3 else f"{index}."
+        lines.append(f"{rank} {num}  —  {count} time(s)")
+
+    lines.extend([
+        "━━━━━━━━━━━━━━",
+        "RandAI analysis only ah, don’t all-in like hero 😴"
+    ])
 
     return "\n".join(lines)
 
+def format_column_name(col):
+
+    if col == "winning1":
+        return "1st Prize"
+
+    if col == "winning2":
+        return "2nd Prize"
+
+    if col == "winning3":
+        return "3rd Prize"
+
+    if col.startswith("special"):
+        num = col.replace("special", "")
+        return f"Special #{num}"
+
+    if col.startswith("consolation"):
+        num = col.replace("consolation", "")
+        return f"Consolation #{num}"
+
+    return col
 
 def search_number_message(number):
     number = clean_num(number)
@@ -604,15 +693,15 @@ def search_number_message(number):
 
             for col in DRAW_COLUMNS:
                 if clean_num(row.get(col, "")) == number:
-                    found_cols.append(col)
+                    found_cols.append(format_column_name(col))
 
             if found_cols:
-                results.append(
-                    f"{name} | "
-                    f"{row.get('date', '')} | "
-                    f"Draw {row.get('drawno', '')} | "
-                    f"{', '.join(found_cols)}"
-                )
+                    results.append(
+                        f"🎯 {name}\n"
+                        f"📅 {row.get('date', '')}\n"
+                        f"🎲 Draw {row.get('drawno', '')}\n"
+                        f"📌 Position: {', '.join(found_cols)}\n"
+                    )
 
     if not results:
         return f"Walao, {number} never appear before leh 😴"
@@ -629,21 +718,42 @@ def search_number_message(number):
 
 
 def stats_message():
+
     toto_rows = load_rows("toto")
     magnum_rows = load_rows("magnum")
 
     toto_latest = toto_rows[-1] if toto_rows else None
     magnum_latest = magnum_rows[-1] if magnum_rows else None
 
-    return (
-        "📊 RandAI Dataset Statistics\n\n"
-        f"Sports Toto rows: {len(toto_rows)}\n"
-        f"Latest Toto date: {toto_latest.get('date', 'N/A') if toto_latest else 'N/A'}\n"
-        f"Latest Toto CSV: {latest_csv('toto') or 'No file'}\n\n"
-        f"Magnum rows: {len(magnum_rows)}\n"
-        f"Latest Magnum date: {magnum_latest.get('date', 'N/A') if magnum_latest else 'N/A'}\n"
-        f"Latest Magnum CSV: {latest_csv('magnum') or 'No file'}"
-    )
+    total_rows = len(toto_rows) + len(magnum_rows)
+
+    lines = [
+        "📊 RandAI Dataset Intelligence Report 😴",
+        "",
+        "━━━━━━━━━━━━━━",
+        "🎰 SPORTS TOTO",
+        f"📦 Total Rows: {len(toto_rows)}",
+        f"📅 Latest Result: {toto_latest.get('date', 'N/A') if toto_latest else 'N/A'}",
+        f"💾 Dataset File:",
+        f"`{os.path.basename(latest_csv('toto')) if latest_csv('toto') else 'No CSV'}`",
+        "",
+        "━━━━━━━━━━━━━━",
+        "🎰 MAGNUM",
+        f"📦 Total Rows: {len(magnum_rows)}",
+        f"📅 Latest Result: {magnum_latest.get('date', 'N/A') if magnum_latest else 'N/A'}",
+        f"💾 Dataset File:",
+        f"`{os.path.basename(latest_csv('magnum')) if latest_csv('magnum') else 'No CSV'}`",
+        "",
+        "━━━━━━━━━━━━━━",
+        "🧠 OVERALL SYSTEM",
+        f"📊 Combined Rows: {total_rows}",
+        f"📁 Data Folder: `{DATA_DIR}/`",
+        f"🤖 Bot Status: ONLINE",
+        "",
+        "RandAI still working harder than some humans 😴"
+    ]
+
+    return "\n".join(lines)
 
 
 # ========================================================
@@ -672,7 +782,7 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "🔄 /update\n"
         "Force RandAI to scrape latest results now.\n"
         "Good for impatient people 😴\n\n"
-        "📦 /dataset\n"
+        "📦 /result\n"
         "Show latest saved Toto & Magnum result from data/.\n"
         "This one read local dataset only.\n\n"
         "🔍 /search 1234\n"
@@ -802,8 +912,8 @@ async def cold(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "Oi data report coming already 😴\n\n"
-        + stats_message()
+        stats_message(),
+        parse_mode="Markdown"
     )
 
 
@@ -818,6 +928,23 @@ async def backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(msg)
 
+async def unknown_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    messages = [
+        "Idk what u say la 😭\nUse command la cibai.",
+        
+        "Type weird weird thing for what 😴\nUse command la cibai.",
+        
+        "RandAI not mind reader leh.\nUse proper command la cibai 😭",
+        
+        "Aiyo...\nI only understand commands 😴\nUse /help if your brain loading.",
+        
+        "Walao eh.\nYou think I ChatGPT is it 😭\nUse command la cibai."
+    ]
+
+    await update.message.reply_text(
+        random.choice(messages)
+    )
 
 # ========================================================
 # AUTO NOTIFICATION
@@ -942,12 +1069,17 @@ def main():
 
     print("===================================")
     print(f"{BOT_NAME} running...")
-    print("Commands: /start, /subscribe, /update, /dataset, /help")
+    print("Commands: /start, /subscribe, /update, /result, /help")
     print("Daily check: 9PM Malaysia Time")
     print("Instant polling: every 5 mins, 7PM-11PM")
     print(f"GitHub backup repo: {GITHUB_REPO_URL}")
     print("===================================")
-
+    app.add_handler(
+        MessageHandler(
+            filters.TEXT & ~filters.COMMAND,
+            unknown_message
+        )
+    )
     app.run_polling()
 
 
