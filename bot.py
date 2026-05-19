@@ -1,7 +1,7 @@
 """
 ========================================================
 RandAI Telegram Bot (@RandAI_bot)
-Author: Jackson / lck920
+Author: lck920
 GitHub: https://github.com/lck920/randai-scraper-bot
 ========================================================
 
@@ -36,13 +36,14 @@ from datetime import datetime, time
 from zoneinfo import ZoneInfo
 
 from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
-from telegram.ext import MessageHandler, filters
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    MessageHandler,
+    ContextTypes,
+    filters,
+)
 
-
-# ========================================================
-# CONFIG
-# ========================================================
 
 BOT_NAME = "@RandAI_bot"
 GITHUB_REPO_URL = "https://github.com/lck920/randai-scraper-bot"
@@ -71,165 +72,18 @@ DRAW_COLUMNS = (
 )
 
 
-# ========================================================
-# RANDAI STYLE MESSAGES
-# ========================================================
-
-def msg_start_menu(bot_name):
-
-    toto = latest_row("toto")
-    magnum = latest_row("magnum")
-
-    if toto or magnum:
-
-        latest_dates = []
-
-        if toto:
-            latest_dates.append(
-                f"🎰 Toto: {toto.get('date', 'N/A')}"
-            )
-
-        if magnum:
-            latest_dates.append(
-                f"🎰 Magnum: {magnum.get('date', 'N/A')}"
-            )
-
-        latest_section = (
-            "📌 Latest Updated Results\n"
-            + "\n".join(latest_dates)
-        )
-
-    else:
-
-        latest_section = (
-            "⚠️ No dataset found yet lah 😴\n"
-            "Use /update first so RandAI can build the data/ folder."
-        )
-
-    return (
-        f"Oi, {bot_name} online already lah 😴\n\n"
-
-        f"I’m RandAI — your lazy-but-useful 4D result bot.\n"
-        f"I scrape Toto & Magnum from 4dmoon, "
-        f"update datasets, analyse numbers, "
-        f"and spoonfeed results to lazy people 😭\n\n"
-
-        f"{latest_section}\n\n"
-
-        f"━━━━━━━━━━━━━━\n"
-        f"📌 MAIN COMMANDS\n\n"
-
-        f"🔔 /subscribe\n"
-        f"Get auto result updates.\n\n"
-
-        f"🔕 /unsubscribe\n"
-        f"Stop auto notifications.\n\n"
-
-        f"🔄 /update\n"
-        f"Force RandAI to scrape latest results now.\n\n"
-
-        f"📦 /dataset\n"
-        f"Show latest saved result from local data/.\n\n"
-
-        f"🔍 /search 1234\n"
-        f"Search old result history.\n\n"
-
-        f"🔥 /hot\n"
-        f"Show hot numbers.\n\n"
-
-        f"🥶 /cold\n"
-        f"Show cold numbers.\n\n"
-
-        f"📊 /stats\n"
-        f"Show dataset statistics.\n\n"
-
-        f"🆘 /help\n"
-        f"Show full command explanation.\n\n"
-
-        f"━━━━━━━━━━━━━━\n"
-        f"🤖 RandAI Status: ONLINE\n"
-        f"💾 Dataset Folder: data/\n\n"
-
-        f"Use properly ah.\n"
-        f"RandAI not your unpaid intern 😴"
-    )
-
-
-MSG_ADMIN_OK = "👀 Admin detected. Boss mode unlocked already lah 😎"
-MSG_NOT_ADMIN = "You not admin lah. Don’t act like owner 😴"
-
-MSG_SUBSCRIBED = (
-    "Subscribed already lah 🔔\n"
-    "Next result keluar I notify you automatically."
-)
-
-MSG_UNSUBSCRIBED = (
-    "Unsubscribed already 🔕\n"
-    "Later don’t ask why RandAI never tell you result ah."
-)
-
-MSG_CHECKING = (
-    "Oi, checking latest Toto & Magnum results now 😴\n"
-    "Don’t rush me lah, scraping also need dignity one."
-)
-
-MSG_RESULT_HEADER = (
-    "Oi, result ready already 😴\n"
-    "See properly ah.\n\n"
-)
-
-MSG_NO_NEW_RESULT = (
-    "Walao eh, no new result yet lah 😴\n"
-    "You refresh so fast for what..."
-)
-
-MSG_NEW_RESULT = (
-    "🚨 Oi, new result keluar already.\n"
-    "RandAI spoonfeed you nicely again 😴\n\n"
-)
-
-MSG_BACKUP_START = (
-    "Backing up to GitHub now.\n"
-    "Serious work in progress 😎"
-)
-
-MSG_BACKUP_NOT_ADMIN = "Backup command admin only lah 😴"
-
-MSG_NO_DATASET = (
-    "Eh no local dataset found yet lah 😴\n"
-    "I scraping from scratch now.\n"
-    "This one may take longer, go drink water first."
-)
-
-MSG_FOUND_DATASET = (
-    "Found existing local dataset already.\n"
-    "Checking latest updates now..."
-)
-
-
-# ========================================================
-# VALIDATION / ADMIN
-# ========================================================
-
 def validate_config():
     if not BOT_TOKEN:
-        raise RuntimeError(
-            "Missing RAND_AI_BOT_TOKEN environment variable."
-        )
+        raise RuntimeError("Missing RAND_AI_BOT_TOKEN environment variable.")
 
 
 def is_admin(chat_id):
     return ADMIN_CHAT_ID is not None and int(chat_id) == int(ADMIN_CHAT_ID)
 
 
-# ========================================================
-# JSON HELPERS
-# ========================================================
-
 def load_json_file(path, default):
     if not os.path.exists(path):
         return default
-
     try:
         with open(path, "r", encoding="utf-8") as f:
             return json.load(f)
@@ -258,18 +112,8 @@ def save_last_notified(data):
     save_json_file(LAST_NOTIFIED_FILE, data)
 
 
-# ========================================================
-# CSV HELPERS
-# ========================================================
-
 def latest_csv(prefix):
-    files = glob.glob(
-        os.path.join(
-            DATA_DIR,
-            f"{prefix}_pastresult_*.csv"
-        )
-    )
-
+    files = glob.glob(os.path.join(DATA_DIR, f"{prefix}_pastresult_*.csv"))
     return max(files, key=os.path.getmtime) if files else None
 
 
@@ -290,7 +134,6 @@ def load_rows(prefix):
         rows = list(csv.DictReader(f))
 
     rows.sort(key=lambda r: parse_date(r.get("date", "")))
-
     return rows
 
 
@@ -322,9 +165,88 @@ def row_key(row):
     )
 
 
-# ========================================================
-# RESULT FORMAT
-# ========================================================
+def msg_start_menu(bot_name):
+    toto = latest_row("toto")
+    magnum = latest_row("magnum")
+
+    if toto or magnum:
+        latest_dates = []
+
+        if toto:
+            latest_dates.append(f"🎰 Toto: {toto.get('date', 'N/A')}")
+
+        if magnum:
+            latest_dates.append(f"🎰 Magnum: {magnum.get('date', 'N/A')}")
+
+        latest_section = "📌 Latest Updated Results\n" + "\n".join(latest_dates)
+    else:
+        latest_section = (
+            "⚠️ No dataset found yet lah 😴\n"
+            "Use /update first so RandAI can build the data/ folder."
+        )
+
+    return (
+        f"Oi, {bot_name} online already lah 😴\n\n"
+        f"I’m RandAI — your lazy-but-useful 4D result bot.\n"
+        f"I scrape Toto & Magnum from 4dmoon, update datasets, analyse numbers, "
+        f"and spoonfeed results to lazy people.\n\n"
+        f"{latest_section}\n\n"
+        f"━━━━━━━━━━━━━━\n"
+        f"📌 MAIN COMMANDS\n\n"
+        f"🔔 /subscribe\n"
+        f"Get auto result updates.\n\n"
+        f"🔕 /unsubscribe\n"
+        f"Stop auto notifications.\n\n"
+        f"🔄 /update\n"
+        f"Force RandAI to scrape latest results now.\n\n"
+        f"📦 /result\n"
+        f"Show latest saved result from local data/.\n\n"
+        f"🔍 /search 1234\n"
+        f"Search old result history.\n\n"
+        f"🔥 /hot\n"
+        f"Show hot numbers.\n\n"
+        f"🥶 /cold\n"
+        f"Show cold numbers.\n\n"
+        f"📊 /stats\n"
+        f"Show dataset statistics.\n\n"
+        f"🆘 /help\n"
+        f"Show full command explanation.\n\n"
+        f"━━━━━━━━━━━━━━\n"
+        f"🤖 RandAI Status: ONLINE\n"
+    )
+
+
+MSG_ADMIN_OK = "👀 Admin detected. Boss mode unlocked already lah 😎"
+MSG_NOT_ADMIN = "You not admin lah. Don’t act like owner 😴"
+MSG_SUBSCRIBED = "Subscribed already lah 🔔\nNext result keluar I notify you automatically."
+MSG_UNSUBSCRIBED = "Unsubscribed already 🔕\nLater don’t ask why RandAI never tell you result ah."
+MSG_CHECKING = "Oi, checking latest Toto & Magnum results now 😴\nDon’t rush me lah, scraping also need dignity one."
+MSG_RESULT_HEADER = "Oi, result ready already 😴\nSee properly ah.\n\n"
+MSG_NO_NEW_RESULT = "Walao eh, no new result yet lah 😴\nYou refresh so fast for what..."
+MSG_NEW_RESULT = "🚨 Oi, new result keluar already.\nRandAI spoonfeed you nicely again 😴\n\n"
+MSG_BACKUP_START = "Backing up to GitHub now.\nSerious work in progress 😎"
+MSG_BACKUP_NOT_ADMIN = "Backup command admin only lah 😴"
+MSG_NO_DATASET = (
+    "Eh no local dataset found yet lah 😴\n"
+    "I scraping from scratch now.\n"
+    "This one may take longer, go drink water first."
+)
+MSG_FOUND_DATASET = "Found existing local dataset already.\nChecking latest updates now..."
+
+
+def format_column_name(col):
+    if col == "winning1":
+        return "1st Prize"
+    if col == "winning2":
+        return "2nd Prize"
+    if col == "winning3":
+        return "3rd Prize"
+    if col.startswith("special"):
+        return f"Special #{col.replace('special', '')}"
+    if col.startswith("consolation"):
+        return f"Consolation #{col.replace('consolation', '')}"
+    return col
+
 
 def format_result(name, row):
     if not row:
@@ -352,21 +274,21 @@ def latest_message():
         + format_result("Magnum", latest_row("magnum"))
     )
 
+async def scheduled_9pm(context: ContextTypes.DEFAULT_TYPE):
 
-# ========================================================
-# SOUNDS
-# ========================================================
+    print("[AUTO UPDATE] 9PM Malaysia update started")
+
+    await check_and_notify(
+        context,
+        force_no_result_msg=False
+    )
 
 async def send_sound(bot, chat_id):
     if not os.path.isdir(SOUNDS_FOLDER):
         return
 
     files = glob.glob(os.path.join(SOUNDS_FOLDER, "*.*"))
-
-    files = [
-        f for f in files
-        if f.lower().endswith((".ogg", ".mp3", ".wav", ".m4a"))
-    ]
+    files = [f for f in files if f.lower().endswith((".ogg", ".mp3", ".wav", ".m4a"))]
 
     if not files:
         return
@@ -379,10 +301,6 @@ async def send_sound(bot, chat_id):
         else:
             await bot.send_audio(chat_id=chat_id, audio=f)
 
-
-# ========================================================
-# SEND CSV
-# ========================================================
 
 async def send_csv_files_to_chat(bot, chat_id):
     for prefix in ["toto", "magnum"]:
@@ -397,29 +315,16 @@ async def send_csv_files_to_chat(bot, chat_id):
                 )
 
 
-# ========================================================
-# SCRAPER WITH PROGRESS
-# ========================================================
-
 async def run_scrapers_with_progress(bot, chat_id):
     for script in SCRAPER_FILES:
         prefix = "toto" if "toto" in script.lower() else "magnum"
 
         if not latest_csv(prefix):
-            await bot.send_message(
-                chat_id=chat_id,
-                text=f"{prefix.upper()}\n\n{MSG_NO_DATASET}"
-            )
+            await bot.send_message(chat_id=chat_id, text=f"{prefix.upper()}\n\n{MSG_NO_DATASET}")
         else:
-            await bot.send_message(
-                chat_id=chat_id,
-                text=f"{prefix.upper()}\n\n{MSG_FOUND_DATASET}"
-            )
+            await bot.send_message(chat_id=chat_id, text=f"{prefix.upper()}\n\n{MSG_FOUND_DATASET}")
 
-        await bot.send_message(
-            chat_id=chat_id,
-            text=f"🚀 Running {script} now..."
-        )
+        await bot.send_message(chat_id=chat_id, text=f"🚀 Running {script} now...")
 
         try:
             process = await asyncio.create_subprocess_exec(
@@ -464,21 +369,12 @@ async def run_scrapers_with_progress(bot, chat_id):
             await process.wait()
 
             if process.returncode == 0:
-                await bot.send_message(
-                    chat_id=chat_id,
-                    text=f"✅ {script} done already lah."
-                )
+                await bot.send_message(chat_id=chat_id, text=f"✅ {script} done already lah.")
             else:
-                await bot.send_message(
-                    chat_id=chat_id,
-                    text=f"❌ {script} got problem lah. Exit code: {process.returncode}"
-                )
+                await bot.send_message(chat_id=chat_id, text=f"❌ {script} got problem lah. Exit code: {process.returncode}")
 
         except Exception as e:
-            await bot.send_message(
-                chat_id=chat_id,
-                text=f"❌ RandAI failed to run {script}: {e}"
-            )
+            await bot.send_message(chat_id=chat_id, text=f"❌ RandAI failed to run {script}: {e}")
 
 
 def run_scrapers_silent():
@@ -508,14 +404,9 @@ def run_scrapers_silent():
 
         except subprocess.TimeoutExpired:
             print(f"[TIMEOUT] {script} took too long. Killed already lah.")
-
         except Exception as e:
             print(f"[ERROR] Failed running {script}: {e}")
 
-
-# ========================================================
-# GITHUB BACKUP
-# ========================================================
 
 def ensure_git_remote():
     try:
@@ -528,17 +419,11 @@ def ensure_git_remote():
         current_url = remote_check.stdout.strip()
 
         if remote_check.returncode != 0:
-            subprocess.run(
-                ["git", "remote", "add", "origin", GITHUB_REPO_URL],
-                check=True
-            )
+            subprocess.run(["git", "remote", "add", "origin", GITHUB_REPO_URL], check=True)
             return
 
         if current_url != GITHUB_REPO_URL:
-            subprocess.run(
-                ["git", "remote", "set-url", "origin", GITHUB_REPO_URL],
-                check=True
-            )
+            subprocess.run(["git", "remote", "set-url", "origin", GITHUB_REPO_URL], check=True)
 
     except Exception as e:
         print(f"[GIT REMOTE ERROR] {e}")
@@ -569,19 +454,12 @@ def git_backup():
             for file in glob.glob(pattern):
                 subprocess.run(["git", "add", file], check=True)
 
-        status = subprocess.run(
-            ["git", "status", "--porcelain"],
-            capture_output=True,
-            text=True
-        )
+        status = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True)
 
         if not status.stdout.strip():
             return "GitHub backup skipped. Nothing changed lah."
 
-        commit_msg = (
-            f"Auto update 4D dataset "
-            f"{datetime.now(KL_TZ).strftime('%Y-%m-%d %H:%M')}"
-        )
+        commit_msg = f"Auto update 4D dataset {datetime.now(KL_TZ).strftime('%Y-%m-%d %H:%M')}"
 
         subprocess.run(["git", "commit", "-m", commit_msg], check=True)
         subprocess.run(["git", "push", "-u", "origin", "main"], check=True)
@@ -591,10 +469,6 @@ def git_backup():
     except Exception as e:
         return f"GitHub backup failed: {e}"
 
-
-# ========================================================
-# ANALYSIS
-# ========================================================
 
 def all_numbers_from_rows(rows):
     nums = []
@@ -610,6 +484,10 @@ def all_numbers_from_rows(rows):
 
 
 def hot_cold_message(mode="hot", limit_rows=50):
+    """
+    Generates a message containing the most (hot) or least (cold) 
+    frequently drawn numbers in recent draws.
+    """
     all_rows = load_rows("toto") + load_rows("magnum")
 
     if not all_rows:
@@ -655,28 +533,12 @@ def hot_cold_message(mode="hot", limit_rows=50):
 
     return "\n".join(lines)
 
-def format_column_name(col):
-
-    if col == "winning1":
-        return "1st Prize"
-
-    if col == "winning2":
-        return "2nd Prize"
-
-    if col == "winning3":
-        return "3rd Prize"
-
-    if col.startswith("special"):
-        num = col.replace("special", "")
-        return f"Special #{num}"
-
-    if col.startswith("consolation"):
-        num = col.replace("consolation", "")
-        return f"Consolation #{num}"
-
-    return col
 
 def search_number_message(number):
+    """
+    Searches the datasets for past appearances of a specific 4-digit number.
+    Returns a formatted message containing all the found results.
+    """
     number = clean_num(number)
 
     if not number:
@@ -696,12 +558,12 @@ def search_number_message(number):
                     found_cols.append(format_column_name(col))
 
             if found_cols:
-                    results.append(
-                        f"🎯 {name}\n"
-                        f"📅 {row.get('date', '')}\n"
-                        f"🎲 Draw {row.get('drawno', '')}\n"
-                        f"📌 Position: {', '.join(found_cols)}\n"
-                    )
+                results.append(
+                    f"🎯 {name}\n"
+                    f"📅 {row.get('date', '')}\n"
+                    f"🎲 Draw {row.get('drawno', '')}\n"
+                    f"📌 Position: {', '.join(found_cols)}\n"
+                )
 
     if not results:
         return f"Walao, {number} never appear before leh 😴"
@@ -718,7 +580,6 @@ def search_number_message(number):
 
 
 def stats_message():
-
     toto_rows = load_rows("toto")
     magnum_rows = load_rows("magnum")
 
@@ -734,31 +595,27 @@ def stats_message():
         "🎰 SPORTS TOTO",
         f"📦 Total Rows: {len(toto_rows)}",
         f"📅 Latest Result: {toto_latest.get('date', 'N/A') if toto_latest else 'N/A'}",
-        f"💾 Dataset File:",
+        "💾 Dataset File:",
         f"`{os.path.basename(latest_csv('toto')) if latest_csv('toto') else 'No CSV'}`",
         "",
         "━━━━━━━━━━━━━━",
         "🎰 MAGNUM",
         f"📦 Total Rows: {len(magnum_rows)}",
         f"📅 Latest Result: {magnum_latest.get('date', 'N/A') if magnum_latest else 'N/A'}",
-        f"💾 Dataset File:",
+        "💾 Dataset File:",
         f"`{os.path.basename(latest_csv('magnum')) if latest_csv('magnum') else 'No CSV'}`",
         "",
         "━━━━━━━━━━━━━━",
         "🧠 OVERALL SYSTEM",
         f"📊 Combined Rows: {total_rows}",
         f"📁 Data Folder: `{DATA_DIR}/`",
-        f"🤖 Bot Status: ONLINE",
+        "🤖 Bot Status: ONLINE",
         "",
         "RandAI still working harder than some humans 😴"
     ]
 
     return "\n".join(lines)
 
-
-# ========================================================
-# COMMANDS
-# ========================================================
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(msg_start_menu(BOT_NAME))
@@ -780,27 +637,20 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Stop notifications.\n"
         "Later don’t ask why nobody tell you result ah.\n\n"
         "🔄 /update\n"
-        "Force RandAI to scrape latest results now.\n"
-        "Good for impatient people 😴\n\n"
+        "Force RandAI to scrape latest results now.\n\n"
         "📦 /result\n"
-        "Show latest saved Toto & Magnum result from data/.\n"
-        "This one read local dataset only.\n\n"
+        "Show latest saved Toto & Magnum result from data/.\n\n"
         "🔍 /search 1234\n"
-        "Search whether a 4-digit number appeared before.\n"
-        "Good for pattern hunters and delulu gamblers.\n\n"
+        "Search whether a 4-digit number appeared before.\n\n"
         "🔥 /hot\n"
-        "Show most frequent numbers recently.\n"
-        "Hot until can fry egg already.\n\n"
+        "Show most frequent numbers recently.\n\n"
         "🥶 /cold\n"
-        "Show least frequent numbers.\n"
-        "Cold until penguin also shiver.\n\n"
+        "Show least frequent numbers.\n\n"
         "📊 /stats\n"
-        "Show dataset statistics.\n"
-        "Rows, latest CSV, latest dates all inside.\n\n"
+        "Show dataset statistics.\n\n"
         "🆘 /help\n"
         "You already using this now 😭\n\n"
-        "Use properly ah.\n"
-        "RandAI not your unpaid intern 😴"
+        "Use properly ah. RandAI not your unpaid intern 😴"
     )
 
     if is_admin(update.effective_chat.id):
@@ -843,12 +693,36 @@ async def unsubscribe(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def update_now(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(MSG_CHECKING)
 
-    await run_scrapers_with_progress(
-        context.bot,
-        update.effective_chat.id
+    status_msg = await update.message.reply_text(
+        "🤖 RandAI checking latest Toto & Magnum results...\n\n"
+        "Please wait ah 😴"
     )
+
+    run_scrapers_silent()
+
+    toto_rows = load_rows("toto")
+    magnum_rows = load_rows("magnum")
+
+    toto_latest = latest_row("toto")
+    magnum_latest = latest_row("magnum")
+
+    summary = (
+        "✅ RandAI update completed\n\n"
+
+        "🎰 Sports Toto\n"
+        f"📅 Latest Result: {toto_latest.get('date', 'N/A') if toto_latest else 'N/A'}\n"
+        f"📦 Total Rows: {len(toto_rows)}\n\n"
+
+        "🎰 Magnum\n"
+        f"📅 Latest Result: {magnum_latest.get('date', 'N/A') if magnum_latest else 'N/A'}\n"
+        f"📦 Total Rows: {len(magnum_rows)}\n\n"
+
+        "━━━━━━━━━━━━━━\n"
+        "🎯 Sending latest results now..."
+    )
+
+    await status_msg.edit_text(summary)
 
     await update.message.reply_text(
         MSG_RESULT_HEADER + latest_message()
@@ -876,45 +750,24 @@ async def dataset(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
-        await update.message.reply_text(
-            "Use properly lah 😴\nExample: /search 1234"
-        )
+        await update.message.reply_text("Use properly lah 😴\nExample: /search 1234")
         return
 
-    await update.message.reply_text(
-        search_number_message(context.args[0])
-    )
+    await update.message.reply_text(search_number_message(context.args[0]))
 
 
 async def hot(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    limit = (
-        int(context.args[0])
-        if context.args and context.args[0].isdigit()
-        else 50
-    )
-
-    await update.message.reply_text(
-        hot_cold_message("hot", limit)
-    )
+    limit = int(context.args[0]) if context.args and context.args[0].isdigit() else 50
+    await update.message.reply_text(hot_cold_message("hot", limit))
 
 
 async def cold(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    limit = (
-        int(context.args[0])
-        if context.args and context.args[0].isdigit()
-        else 50
-    )
-
-    await update.message.reply_text(
-        hot_cold_message("cold", limit)
-    )
+    limit = int(context.args[0]) if context.args and context.args[0].isdigit() else 50
+    await update.message.reply_text(hot_cold_message("cold", limit))
 
 
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        stats_message(),
-        parse_mode="Markdown"
-    )
+    await update.message.reply_text(stats_message(), parse_mode="Markdown")
 
 
 async def backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -928,29 +781,20 @@ async def backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(msg)
 
-async def unknown_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
+async def unknown_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     messages = [
-        "Idk what u say la 😭\nUse command la cibai.",
-        
-        "Type weird weird thing for what 😴\nUse command la cibai.",
-        
-        "RandAI not mind reader leh.\nUse proper command la cibai 😭",
-        
-        "Aiyo...\nI only understand commands 😴\nUse /help if your brain loading.",
-        
-        "Walao eh.\nYou think I ChatGPT is it 😭\nUse command la cibai."
+        "Idk what u say la 😭\nUse command la cibai.\n\nType /start to see main menu.",
+        "Type weird weird thing for what 😴\nUse command la cibai.\n\nIf blur blur, use /start.",
+        "RandAI not mind reader leh 😭\nUse proper command la cibai.\n\nTry /start for menu.",
+        "Aiyo...\nI only understand commands 😴\n\nUse /start if your brain loading.",
+        "Walao eh.\nYou think I ChatGPT is it 😭\nUse command la cibai.\n\nType /start for available commands.",
     ]
 
-    await update.message.reply_text(
-        random.choice(messages)
-    )
+    await update.message.reply_text(random.choice(messages))
 
-# ========================================================
-# AUTO NOTIFICATION
-# ========================================================
 
-async def check_and_notify(context: ContextTypes.DEFAULT_TYPE, force_no_result_msg=False):
+async def check_and_notify(context: ContextTypes.DEFAULT_TYPE, target_users=None, force_no_result_msg=False):
     run_scrapers_silent()
 
     after_toto = latest_row("toto")
@@ -969,10 +813,12 @@ async def check_and_notify(context: ContextTypes.DEFAULT_TYPE, force_no_result_m
         current["magnum"] and current["magnum"] != last_data.get("magnum")
     )
 
-    subscribers = load_subscribers()
-
-    if ADMIN_CHAT_ID:
-        subscribers.add(ADMIN_CHAT_ID)
+    if target_users is None:
+        subscribers = load_subscribers()
+        if ADMIN_CHAT_ID:
+            subscribers.add(ADMIN_CHAT_ID)
+    else:
+        subscribers = set(target_users)
 
     if not subscribers:
         print("[INFO] No subscribers yet.")
@@ -981,10 +827,7 @@ async def check_and_notify(context: ContextTypes.DEFAULT_TYPE, force_no_result_m
     if not has_new:
         if force_no_result_msg:
             for chat_id in subscribers:
-                await context.bot.send_message(
-                    chat_id=chat_id,
-                    text=MSG_NO_NEW_RESULT
-                )
+                await context.bot.send_message(chat_id=chat_id, text=MSG_NO_NEW_RESULT)
         return
 
     last_data.update(current)
@@ -994,23 +837,31 @@ async def check_and_notify(context: ContextTypes.DEFAULT_TYPE, force_no_result_m
 
     for chat_id in subscribers:
         await context.bot.send_message(chat_id=chat_id, text=text)
+        await send_csv_files_to_chat(context.bot, chat_id)
+        await send_sound(context.bot, chat_id)
 
-        await send_csv_files_to_chat(
-            context.bot,
-            chat_id
-        )
+async def user_time_notifier(context: ContextTypes.DEFAULT_TYPE):
+    now = datetime.now(KL_TZ).strftime("%H:%M")
 
-        await send_sound(
-            context.bot,
-            chat_id
-        )
+    subscribers = load_subscribers()
 
-    git_backup()
+    if ADMIN_CHAT_ID:
+        subscribers.add(ADMIN_CHAT_ID)
 
+    if not subscribers:
+        return
 
-async def scheduled_9pm(context: ContextTypes.DEFAULT_TYPE):
+    target_users = [
+        chat_id for chat_id in subscribers
+        if get_user_notify_time(chat_id) == now
+    ]
+
+    if not target_users:
+        return
+
     await check_and_notify(
         context,
+        target_users=target_users,
         force_no_result_msg=True
     )
 
@@ -1019,67 +870,61 @@ async def instant_polling(context: ContextTypes.DEFAULT_TYPE):
     now = datetime.now(KL_TZ)
 
     if 19 <= now.hour <= 23:
-        await check_and_notify(
-            context,
-            force_no_result_msg=False
-        )
+        await check_and_notify(context, force_no_result_msg=False)
 
-
-# ========================================================
-# MAIN
-# ========================================================
 
 def main():
     validate_config()
-
     os.makedirs(DATA_DIR, exist_ok=True)
 
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_cmd))
-
     app.add_handler(CommandHandler("subscribe", subscribe))
     app.add_handler(CommandHandler("unsubscribe", unsubscribe))
-
     app.add_handler(CommandHandler("update", update_now))
     app.add_handler(CommandHandler("dataset", dataset))
-
     app.add_handler(CommandHandler("search", search))
     app.add_handler(CommandHandler("hot", hot))
     app.add_handler(CommandHandler("cold", cold))
     app.add_handler(CommandHandler("stats", stats))
-
     app.add_handler(CommandHandler("backup", backup))
     app.add_handler(CommandHandler("admincheck", admincheck))
+
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, unknown_message))
 
     app.job_queue.run_daily(
         scheduled_9pm,
         time=time(hour=21, minute=0, tzinfo=KL_TZ),
-        name="daily_9pm_check"
+        name="daily_9pm_update"
     )
 
-    # Comment this block during testing if it keeps scraping too often.
-    app.job_queue.run_repeating(
-        instant_polling,
-        interval=300,
-        first=30,
-        name="instant_polling_7pm_to_11pm"
-    )
+    print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+    print("🤖 RandAI Telegram Bot Online")
+    print(f"📌 Bot Name: {BOT_NAME}")
+    print("📡 Status: RUNNING")
+    print("⏰ Auto Update: Daily 9:00 PM (Malaysia Time)")
+    print("📂 Dataset Folder: data/")
+    print("🔔 Subscribers System: ENABLED")
+    print("💾 GitHub Auto Backup: DISABLED")
+    print("")
+    print("📌 Available Commands")
+    print("/start")
+    print("/subscribe")
+    print("/unsubscribe")
+    print("/update")
+    print("/dataset")
+    print("/search 1234")
+    print("/hot")
+    print("/cold")
+    print("/stats")
+    print("/help")
+    print("")
+    print(f"🌐 GitHub Repo:")
+    print(GITHUB_REPO_URL)
+    print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
-    print("===================================")
-    print(f"{BOT_NAME} running...")
-    print("Commands: /start, /subscribe, /update, /result, /help")
-    print("Daily check: 9PM Malaysia Time")
-    print("Instant polling: every 5 mins, 7PM-11PM")
-    print(f"GitHub backup repo: {GITHUB_REPO_URL}")
-    print("===================================")
-    app.add_handler(
-        MessageHandler(
-            filters.TEXT & ~filters.COMMAND,
-            unknown_message
-        )
-    )
     app.run_polling()
 
 

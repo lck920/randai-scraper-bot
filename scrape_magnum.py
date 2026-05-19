@@ -1,3 +1,7 @@
+"""
+Scraper script for Magnum 4D results from 4dmoon.com.
+This script fetches past results, parses them, and saves them to a CSV file.
+"""
 import csv
 import glob
 import os
@@ -44,6 +48,10 @@ CSV_COLUMNS = [
 
 
 def pad4(value):
+    """
+    Pads a given string value to ensure it is exactly 4 digits long.
+    Strips non-digit characters and prepends zeros if necessary.
+    """
     value = str(value).strip()
     if value == "----" or not value:
         return ""
@@ -137,34 +145,91 @@ def scrape_date(draw_date):
         return None
 
     soup = BeautifulSoup(html, "html.parser")
-    page_text = soup.get_text(" ", strip=True)
 
-    if GAME_NAME.lower() not in page_text.lower():
+    # Find only the Magnum 4D box, not the whole page
+    magnum_box = None
+
+    for box in soup.select("div.mbx"):
+        text = box.get_text(" ", strip=True)
+
+        if "Magnum 4D" in text and "Magnum 4D Jackpot" not in text:
+            magnum_box = box
+            break
+
+    if not magnum_box:
         return None
 
-    numbers = extract_numbers(page_text)
+    text = magnum_box.get_text(" ", strip=True)
 
-    if len(numbers) < 23:
-        return None
+    # Draw no, example: #369/26
+    draw_match = re.search(r"#\s*([0-9]+/[0-9]+)", text)
+    draw_no = draw_match.group(1) if draw_match else ""
 
     row = {col: "" for col in CSV_COLUMNS}
-
     row["date"] = draw_date.strftime("%d-%m-%Y")
-    row["drawno"] = ""
+    row["drawno"] = draw_no
 
-    row["winning1"] = pad4(numbers[0])
-    row["winning2"] = pad4(numbers[1])
-    row["winning3"] = pad4(numbers[2])
+    # Latest/current page uses IDs: MP1, MP2, MP3, MS1..MS13, MC1..MC10
+    if magnum_box.select_one("#MP1"):
+        row["winning1"] = pad4(magnum_box.select_one("#MP1").get_text(strip=True))
+        row["winning2"] = pad4(magnum_box.select_one("#MP2").get_text(strip=True))
+        row["winning3"] = pad4(magnum_box.select_one("#MP3").get_text(strip=True))
 
-    idx = 3
+        special_nums = []
+        for i in range(1, 14):
+            el = magnum_box.select_one(f"#MS{i}")
+            if el:
+                num = pad4(el.get_text(strip=True))
+                if num:
+                    special_nums.append(num)
 
-    for i in range(1, 11):
-        row[f"special{i}"] = pad4(numbers[idx])
-        idx += 1
+        consolation_nums = []
+        for i in range(1, 11):
+            el = magnum_box.select_one(f"#MC{i}")
+            if el:
+                num = pad4(el.get_text(strip=True))
+                if num:
+                    consolation_nums.append(num)
 
-    for i in range(1, 11):
-        row[f"consolation{i}"] = pad4(numbers[idx])
-        idx += 1
+    else:
+        # Past page format: prize numbers are inside class rtn
+        prize_cells = magnum_box.select("td.rtn")
+        if len(prize_cells) < 3:
+            return None
+
+        row["winning1"] = pad4(prize_cells[0].get_text(strip=True))
+        row["winning2"] = pad4(prize_cells[1].get_text(strip=True))
+        row["winning3"] = pad4(prize_cells[2].get_text(strip=True))
+
+        special_nums = []
+        consolation_nums = []
+
+        tables = magnum_box.select("table.rtb2")
+
+        for table in tables:
+            table_text = table.get_text(" ", strip=True)
+
+            if "Special" in table_text:
+                for cell in table.select("td.rbn"):
+                    num = pad4(cell.get_text(strip=True))
+                    if num:
+                        special_nums.append(num)
+
+            elif "Consolation" in table_text:
+                for cell in table.select("td.rbn"):
+                    num = pad4(cell.get_text(strip=True))
+                    if num:
+                        consolation_nums.append(num)
+
+    special_nums = (special_nums + [""] * 10)[:10]
+    consolation_nums = (consolation_nums + [""] * 10)[:10]
+
+    for i in range(10):
+        row[f"special{i + 1}"] = special_nums[i]
+        row[f"consolation{i + 1}"] = consolation_nums[i]
+
+    if not row["winning1"] or not row["winning2"] or not row["winning3"]:
+        return None
 
     return row
 
@@ -179,6 +244,11 @@ def write_csv(rows, path):
 
 
 def main():
+    """
+    Main execution function.
+    Checks for an existing dataset, determines the date range to scrape,
+    fetches new results concurrently, and saves the updated dataset.
+    """
     existing_file = find_latest_csv()
     existing_rows = []
 
