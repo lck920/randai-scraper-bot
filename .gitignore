@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+
+subscribers.json
+last_notified.json
+
+sounds/
+
+.env
+
+*.log
