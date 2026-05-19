@@ -907,7 +907,6 @@ def main():
     print("⏰ Auto Update: Daily 9:00 PM (Malaysia Time)")
     print("📂 Dataset Folder: data/")
     print("🔔 Subscribers System: ENABLED")
-    print("💾 GitHub Auto Backup: DISABLED")
     print("")
     print("📌 Available Commands")
     print("/start")
