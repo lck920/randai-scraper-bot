@@ -54,14 +54,13 @@ ADMIN_CHAT_ID = int(ADMIN_CHAT_ID) if ADMIN_CHAT_ID else None
 
 DATA_DIR = "data"
 SOUNDS_FOLDER = "sounds"
+SUBSCRIBERS_FILE = "subscribers.json"
+LAST_NOTIFIED_FILE = "last_notified.json"
 
 SCRAPER_FILES = [
     "scrape_toto.py",
     "scrape_magnum.py",
 ]
-
-SUBSCRIBERS_FILE = "subscribers.json"
-LAST_NOTIFIED_FILE = "last_notified.json"
 
 KL_TZ = ZoneInfo("Asia/Kuala_Lumpur")
 
@@ -72,13 +71,16 @@ DRAW_COLUMNS = (
 )
 
 
+is_updating = False
+
+
 def validate_config():
     if not BOT_TOKEN:
         raise RuntimeError("Missing RAND_AI_BOT_TOKEN environment variable.")
 
 
-def is_admin(chat_id):
-    return ADMIN_CHAT_ID is not None and int(chat_id) == int(ADMIN_CHAT_ID)
+def is_admin(user_id):
+    return ADMIN_CHAT_ID is not None and user_id is not None and int(user_id) == int(ADMIN_CHAT_ID)
 
 
 def load_json_file(path, default):
@@ -100,8 +102,8 @@ def load_subscribers():
     return set(load_json_file(SUBSCRIBERS_FILE, []))
 
 
-def save_subscribers(subscribers):
-    save_json_file(SUBSCRIBERS_FILE, sorted(list(subscribers)))
+def save_subscribers(subs):
+    save_json_file(SUBSCRIBERS_FILE, list(subs))
 
 
 def load_last_notified():
@@ -191,16 +193,15 @@ def msg_start_menu(bot_name):
         f"I scrape Toto & Magnum from 4dmoon, update datasets, analyse numbers, "
         f"and spoonfeed results to lazy people.\n\n"
         f"{latest_section}\n\n"
-        f"━━━━━━━━━━━━━━\n"
         f"📌 MAIN COMMANDS\n\n"
-        f"🔔 /subscribe\n"
-        f"Get auto result updates.\n\n"
-        f"🔕 /unsubscribe\n"
-        f"Stop auto notifications.\n\n"
         f"🔄 /update\n"
         f"Force RandAI to scrape latest results now.\n\n"
+        f"🔔 /subscribe\n"
+        f"Subscribe to automatic new result notifications.\n\n"
+        f"🔕 /unsubscribe\n"
+        f"Stop receiving automatic notifications.\n\n"
         f"📦 /result\n"
-        f"Show latest saved result from local data/.\n\n"
+        f"Show latest saved result from local data.\n\n"
         f"🔍 /search 1234\n"
         f"Search old result history.\n\n"
         f"🔥 /hot\n"
@@ -218,8 +219,6 @@ def msg_start_menu(bot_name):
 
 MSG_ADMIN_OK = "👀 Admin detected. Boss mode unlocked already lah 😎"
 MSG_NOT_ADMIN = "You not admin lah. Don’t act like owner 😴"
-MSG_SUBSCRIBED = "Subscribed already lah 🔔\nNext result keluar I notify you automatically."
-MSG_UNSUBSCRIBED = "Unsubscribed already 🔕\nLater don’t ask why RandAI never tell you result ah."
 MSG_CHECKING = "Oi, checking latest Toto & Magnum results now 😴\nDon’t rush me lah, scraping also need dignity one."
 MSG_RESULT_HEADER = "Oi, result ready already 😴\nSee properly ah.\n\n"
 MSG_NO_NEW_RESULT = "Walao eh, no new result yet lah 😴\nYou refresh so fast for what..."
@@ -272,15 +271,6 @@ def latest_message():
         + format_result("Sports Toto", latest_row("toto"))
         + "\n\n"
         + format_result("Magnum", latest_row("magnum"))
-    )
-
-async def scheduled_9pm(context: ContextTypes.DEFAULT_TYPE):
-
-    print("[AUTO UPDATE] 9PM Malaysia update started")
-
-    await check_and_notify(
-        context,
-        force_no_result_msg=False
     )
 
 async def send_sound(bot, chat_id):
@@ -433,6 +423,19 @@ def git_backup():
     try:
         ensure_git_remote()
 
+        # Determine original branch
+        res = subprocess.run(["git", "branch", "--show-current"], capture_output=True, text=True)
+        orig_branch = res.stdout.strip() or "main"
+
+        # Determine machine specific branch name
+        import socket
+        try:
+            hostname = socket.gethostname().lower().strip()
+            clean_hostname = re.sub(r"[^a-zA-Z0-9_-]", "", hostname)
+            branch_name = f"backup-{clean_hostname}"
+        except Exception:
+            branch_name = "backup-unknown-host"
+
         safe_files = [
             "bot.py",
             "scrape_toto.py",
@@ -461,12 +464,26 @@ def git_backup():
 
         commit_msg = f"Auto update 4D dataset {datetime.now(KL_TZ).strftime('%Y-%m-%d %H:%M')}"
 
+        # Commit on the original branch
         subprocess.run(["git", "commit", "-m", commit_msg], check=True)
-        subprocess.run(["git", "push", "-u", "origin", "main"], check=True)
 
-        return "GitHub backup done already 😎"
+        # Switch to (or reset) the machine specific branch locally
+        subprocess.run(["git", "checkout", "-B", branch_name], check=True)
+
+        # Push the machine specific branch to GitHub
+        subprocess.run(["git", "push", "-u", "origin", branch_name], check=True)
+
+        # Switch back to the original branch so user's workspace is unaffected
+        subprocess.run(["git", "checkout", orig_branch], check=True)
+
+        return f"GitHub backup done already 😎\nPushed to branch: {branch_name}"
 
     except Exception as e:
+        # Attempt to switch back to original branch if git state is left on branch_name
+        try:
+            subprocess.run(["git", "checkout", orig_branch], check=False)
+        except Exception:
+            pass
         return f"GitHub backup failed: {e}"
 
 
@@ -620,8 +637,37 @@ def stats_message():
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(msg_start_menu(BOT_NAME))
 
-    if is_admin(update.effective_chat.id):
+    user_id = update.effective_user.id if update.effective_user else None
+    if is_admin(user_id):
         await update.message.reply_text(MSG_ADMIN_OK)
+
+
+async def subscribe(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    subs = load_subscribers()
+    if chat_id in subs:
+        await update.message.reply_text("Oi! You subscribed already lah! Don't spam `/subscribe` 😴")
+        return
+    subs.add(chat_id)
+    save_subscribers(subs)
+    await update.message.reply_text(
+        "Got it! You subscribed already lah 🎯\n"
+        "Next time new Toto or Magnum result keluar, RandAI will fetch and spoonfeed it to you automatically! 😴"
+    )
+
+
+async def unsubscribe(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    subs = load_subscribers()
+    if chat_id not in subs:
+        await update.message.reply_text("Walao eh, you not even subscribed yet! How to unsubscribe? 😴")
+        return
+    subs.discard(chat_id)
+    save_subscribers(subs)
+    await update.message.reply_text(
+        "Aiyo... unsubscribe already. So heartless one 😭\n"
+        "Fine, next time no more auto results for you. Go check yourself lah! 😴"
+    )
 
 
 async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -630,14 +676,12 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Still need type /help somemore...\n\n"
         "Nevermind lah, RandAI explain again.\n\n"
         "📌 COMMAND LIST\n\n"
-        "🔔 /subscribe\n"
-        "Subscribe to auto Toto & Magnum updates.\n"
-        "New result keluar = I notify you automatically.\n\n"
-        "🔕 /unsubscribe\n"
-        "Stop notifications.\n"
-        "Later don’t ask why nobody tell you result ah.\n\n"
         "🔄 /update\n"
         "Force RandAI to scrape latest results now.\n\n"
+        "🔔 /subscribe\n"
+        "Subscribe to automatic new result notifications.\n\n"
+        "🔕 /unsubscribe\n"
+        "Stop receiving automatic notifications.\n\n"
         "📦 /result\n"
         "Show latest saved Toto & Magnum result from data/.\n\n"
         "🔍 /search 1234\n"
@@ -653,7 +697,8 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Use properly ah. RandAI not your unpaid intern 😴"
     )
 
-    if is_admin(update.effective_chat.id):
+    user_id = update.effective_user.id if update.effective_user else None
+    if is_admin(user_id):
         msg += (
             "\n\n👑 ADMIN COMMANDS\n\n"
             "💾 /backup\n"
@@ -666,84 +711,79 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def admincheck(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if is_admin(update.effective_chat.id):
+    user_id = update.effective_user.id if update.effective_user else None
+    if is_admin(user_id):
         await update.message.reply_text(MSG_ADMIN_OK)
     else:
         await update.message.reply_text(MSG_NOT_ADMIN)
 
 
-async def subscribe(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.effective_chat.id
-
-    subscribers = load_subscribers()
-    subscribers.add(chat_id)
-    save_subscribers(subscribers)
-
-    await update.message.reply_text(MSG_SUBSCRIBED)
-
-
-async def unsubscribe(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.effective_chat.id
-
-    subscribers = load_subscribers()
-    subscribers.discard(chat_id)
-    save_subscribers(subscribers)
-
-    await update.message.reply_text(MSG_UNSUBSCRIBED)
-
-
 async def update_now(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    global is_updating
+    if is_updating:
+        sassy_busy_messages = [
+            "Walao eh! Someone else already updating lah! You wait first can or not? 😴",
+            "Oi! Don't spam lah! I already running the scraper. Later block my IP then you know 😭",
+            "Sabar lah bro! I only got one pair of hands. Scraping in progress, don't rush me!",
+            "Aiyo, so eager for what? I already checking. Wait a bit lah! 😴"
+        ]
+        await update.message.reply_text(random.choice(sassy_busy_messages))
+        return
 
-    status_msg = await update.message.reply_text(
-        "🤖 RandAI checking latest Toto & Magnum results...\n\n"
-        "Please wait ah 😴"
-    )
+    is_updating = True
+    try:
+        status_msg = await update.message.reply_text(
+            "🤖 RandAI checking latest Toto & Magnum results...\n\n"
+            "Please wait ah 😴"
+        )
 
-    run_scrapers_silent()
+        await asyncio.to_thread(run_scrapers_silent)
 
-    toto_rows = load_rows("toto")
-    magnum_rows = load_rows("magnum")
+        toto_rows = load_rows("toto")
+        magnum_rows = load_rows("magnum")
 
-    toto_latest = latest_row("toto")
-    magnum_latest = latest_row("magnum")
+        toto_latest = latest_row("toto")
+        magnum_latest = latest_row("magnum")
 
-    summary = (
-        "✅ RandAI update completed\n\n"
+        summary = (
+            "✅ RandAI update completed\n\n"
 
-        "🎰 Sports Toto\n"
-        f"📅 Latest Result: {toto_latest.get('date', 'N/A') if toto_latest else 'N/A'}\n"
-        f"📦 Total Rows: {len(toto_rows)}\n\n"
+            "🎰 Sports Toto\n"
+            f"📅 Latest Result: {toto_latest.get('date', 'N/A') if toto_latest else 'N/A'}\n"
+            f"📦 Total Rows: {len(toto_rows)}\n\n"
 
-        "🎰 Magnum\n"
-        f"📅 Latest Result: {magnum_latest.get('date', 'N/A') if magnum_latest else 'N/A'}\n"
-        f"📦 Total Rows: {len(magnum_rows)}\n\n"
+            "🎰 Magnum\n"
+            f"📅 Latest Result: {magnum_latest.get('date', 'N/A') if magnum_latest else 'N/A'}\n"
+            f"📦 Total Rows: {len(magnum_rows)}\n\n"
 
-        "━━━━━━━━━━━━━━\n"
-        "🎯 Sending latest results now..."
-    )
+            "━━━━━━━━━━━━━━\n"
+            "🎯 Sending latest results now..."
+        )
 
-    await status_msg.edit_text(summary)
+        await status_msg.edit_text(summary)
 
-    await update.message.reply_text(
-        MSG_RESULT_HEADER + latest_message()
-    )
+        await update.message.reply_text(
+            MSG_RESULT_HEADER + latest_message()
+        )
 
-    await send_csv_files_to_chat(
-        context.bot,
-        update.effective_chat.id
-    )
+        await send_csv_files_to_chat(
+            context.bot,
+            update.effective_chat.id
+        )
 
-    await send_sound(
-        context.bot,
-        update.effective_chat.id
-    )
+        await send_sound(
+            context.bot,
+            update.effective_chat.id
+        )
+    finally:
+        is_updating = False
 
 
 async def dataset(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "📦 RandAI Dataset Loaded 😴\n\n"
         "Here your latest saved Toto & Magnum result lah.\n"
-        "Local data/ folder one, not live scrape.\n\n"
+        "Local data folder one, not live scrape.\n\n"
         + latest_message()
     )
 
@@ -771,7 +811,8 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_admin(update.effective_chat.id):
+    user_id = update.effective_user.id if update.effective_user else None
+    if not is_admin(user_id):
         await update.message.reply_text(MSG_BACKUP_NOT_ADMIN)
         return
 
@@ -795,7 +836,16 @@ async def unknown_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def check_and_notify(context: ContextTypes.DEFAULT_TYPE, target_users=None, force_no_result_msg=False):
-    run_scrapers_silent()
+    global is_updating
+    if is_updating:
+        print("[INFO] Scraper is already running. Skipping concurrent check_and_notify.")
+        return
+
+    is_updating = True
+    try:
+        await asyncio.to_thread(run_scrapers_silent)
+    finally:
+        is_updating = False
 
     after_toto = latest_row("toto")
     after_magnum = latest_row("magnum")
@@ -827,7 +877,10 @@ async def check_and_notify(context: ContextTypes.DEFAULT_TYPE, target_users=None
     if not has_new:
         if force_no_result_msg:
             for chat_id in subscribers:
-                await context.bot.send_message(chat_id=chat_id, text=MSG_NO_NEW_RESULT)
+                try:
+                    await context.bot.send_message(chat_id=chat_id, text=MSG_NO_NEW_RESULT)
+                except Exception as e:
+                    print(f"[ERROR] Failed to send no-new-result to {chat_id}: {e}")
         return
 
     last_data.update(current)
@@ -836,41 +889,29 @@ async def check_and_notify(context: ContextTypes.DEFAULT_TYPE, target_users=None
     text = MSG_NEW_RESULT + latest_message()
 
     for chat_id in subscribers:
-        await context.bot.send_message(chat_id=chat_id, text=text)
-        await send_csv_files_to_chat(context.bot, chat_id)
-        await send_sound(context.bot, chat_id)
+        try:
+            await context.bot.send_message(chat_id=chat_id, text=text)
+            await send_csv_files_to_chat(context.bot, chat_id)
+            await send_sound(context.bot, chat_id)
+        except Exception as e:
+            print(f"[ERROR] Failed to notify {chat_id}: {e}")
 
-async def user_time_notifier(context: ContextTypes.DEFAULT_TYPE):
-    now = datetime.now(KL_TZ).strftime("%H:%M")
 
-    subscribers = load_subscribers()
-
-    if ADMIN_CHAT_ID:
-        subscribers.add(ADMIN_CHAT_ID)
-
-    if not subscribers:
-        return
-
-    target_users = [
-        chat_id for chat_id in subscribers
-        if get_user_notify_time(chat_id) == now
-    ]
-
-    if not target_users:
-        return
-
-    await check_and_notify(
-        context,
-        target_users=target_users,
-        force_no_result_msg=True
-    )
+async def scheduled_9pm(context: ContextTypes.DEFAULT_TYPE):
+    now = datetime.now(KL_TZ)
+    if now.weekday() in (1, 2, 5, 6):
+        print(f"[INFO] Triggering scheduled_9pm check on draw day: {now}")
+        await check_and_notify(context, force_no_result_msg=False)
+    else:
+        print(f"[INFO] Skipping scheduled_9pm check (not a draw day): {now}")
 
 
 async def instant_polling(context: ContextTypes.DEFAULT_TYPE):
     now = datetime.now(KL_TZ)
-
-    if 19 <= now.hour <= 23:
-        await check_and_notify(context, force_no_result_msg=False)
+    if now.weekday() in (1, 2, 5, 6):
+        if 19 <= now.hour <= 23:
+            print(f"[INFO] Triggering instant_polling on draw day at hour {now.hour}")
+            await check_and_notify(context, force_no_result_msg=False)
 
 
 def main():
@@ -885,19 +926,28 @@ def main():
     app.add_handler(CommandHandler("unsubscribe", unsubscribe))
     app.add_handler(CommandHandler("update", update_now))
     app.add_handler(CommandHandler("dataset", dataset))
+    app.add_handler(CommandHandler("result", dataset))
     app.add_handler(CommandHandler("search", search))
     app.add_handler(CommandHandler("hot", hot))
     app.add_handler(CommandHandler("cold", cold))
     app.add_handler(CommandHandler("stats", stats))
     app.add_handler(CommandHandler("backup", backup))
     app.add_handler(CommandHandler("admincheck", admincheck))
-
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, unknown_message))
 
+    # Daily 9:00 PM Malaysia time scheduled check & results broadcast
     app.job_queue.run_daily(
         scheduled_9pm,
         time=time(hour=21, minute=0, tzinfo=KL_TZ),
         name="daily_9pm_update"
+    )
+
+    # 10-minute repeating result poll during evening draw hours on draw days
+    app.job_queue.run_repeating(
+        instant_polling,
+        interval=600,
+        first=15,
+        name="instant_polling"
     )
 
     print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
@@ -913,7 +963,7 @@ def main():
     print("/subscribe")
     print("/unsubscribe")
     print("/update")
-    print("/dataset")
+    print("/result")
     print("/search 1234")
     print("/hot")
     print("/cold")
